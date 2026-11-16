@@ -2,7 +2,7 @@ import json
 import os
 import time
 from django.core.management.base import BaseCommand
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException
 from orders.models import Order
 
 class Command(BaseCommand):
@@ -28,6 +28,10 @@ class Command(BaseCommand):
                 if msg is None:
                     continue
                 if msg.error():
+                    # Se o tópico ainda não foi criado pelo Producer, apenas aguarda
+                    if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        time.sleep(2)
+                        continue
                     raise KafkaException(msg.error())
 
                 event = json.loads(msg.value().decode('utf-8'))
@@ -35,12 +39,11 @@ class Command(BaseCommand):
 
                 self.stdout.write(f"Processing dispatch for Order #{order_id} ({event['product']})...")
                 
-                # Simula o tempo de processamento da expedição / integração logística
+                # Simula o tempo de processamento da expedição
                 time.sleep(3)
 
                 Order.objects.filter(id=order_id).update(status='DISPATCHED')
                 
-                # Commit manual do offset apenas após persistência bem-sucedida
                 consumer.commit(asynchronous=False)
                 self.stdout.write(self.style.SUCCESS(f"Order #{order_id} successfully DISPATCHED!"))
 

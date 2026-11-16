@@ -9,6 +9,11 @@ services:
       - "8000:8000"
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_NAME=orders_db
+      - DB_USER=admin
+      - DB_PASSWORD=secret
+      - DB_HOST=db
+      - DB_PORT=5432
     depends_on:
       - kafka
   worker:
@@ -19,6 +24,11 @@ services:
       - .:/app
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_NAME=orders_db
+      - DB_USER=admin
+      - DB_PASSWORD=secret
+      - DB_HOST=db
+      - DB_PORT=5432
     depends_on:
       - kafka
       - web    
@@ -37,3 +47,22 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_orders_db
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d orders_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:          
