@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 class Order(models.Model):
@@ -5,7 +6,7 @@ class Order(models.Model):
         ('PENDING', 'Pending Dispatch'),
         ('DISPATCHED', 'Dispatched'),
     ]
-
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     customer = models.CharField(max_length=100)
     product = models.CharField(max_length=100)
     quantity = models.IntegerField(default=1)

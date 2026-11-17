@@ -6,7 +6,7 @@ from confluent_kafka import Consumer, KafkaError, KafkaException
 from orders.models import Order
 
 class Command(BaseCommand):
-    help = 'Consumes order-created events from Kafka and dispatches orders.'
+    help = 'Consumes order-created events from Kafka and persists dispatched orders.'
 
     def handle(self, *args, **options):
         kafka_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
@@ -28,24 +28,36 @@ class Command(BaseCommand):
                 if msg is None:
                     continue
                 if msg.error():
-                    # Se o tópico ainda não foi criado pelo Producer, apenas aguarda
                     if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
                         time.sleep(2)
                         continue
                     raise KafkaException(msg.error())
 
                 event = json.loads(msg.value().decode('utf-8'))
-                order_id = event['order_id']
+                order_uuid = event['uuid']
 
-                self.stdout.write(f"Processing dispatch for Order #{order_id} ({event['product']})...")
+                self.stdout.write(f"Processing dispatch for Order UUID {order_uuid} ({event['product']})...")
                 
                 # Simula o tempo de processamento da expedição
                 time.sleep(3)
 
-                Order.objects.filter(id=order_id).update(status='DISPATCHED')
+                # Idempotência: cria no banco apenas se esse UUID ainda não existir
+                order, created = Order.objects.get_or_create(
+                    uuid=order_uuid,
+                    defaults={
+                        'customer': event['customer'],
+                        'product': event['product'],
+                        'quantity': event['quantity'],
+                        'status': 'DISPATCHED',
+                    }
+                )
                 
                 consumer.commit(asynchronous=False)
-                self.stdout.write(self.style.SUCCESS(f"Order #{order_id} successfully DISPATCHED!"))
+                
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"Order #{order.id} ({order_uuid}) persisted and DISPATCHED!"))
+                else:
+                    self.stdout.write(self.style.WARNING(f"Duplicate event ignored for Order UUID {order_uuid}."))
 
         except KeyboardInterrupt:
             self.stdout.write('Stopping worker...')
