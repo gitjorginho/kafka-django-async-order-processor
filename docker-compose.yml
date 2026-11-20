@@ -1,12 +1,20 @@
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: django_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - web
   web:
     build: .
-    container_name: django_producer_web
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: sh -c "python manage.py migrate && gunicorn setup.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "8000"
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - DB_NAME=orders_db
@@ -18,10 +26,10 @@ services:
       - kafka
   worker:
     build: .
-    container_name: django_consumer_worker
-    command: python manage.py consume_orders
+    command: python -u manage.py consume_orders
     volumes:
       - .:/app
+    restart: always
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - DB_NAME=orders_db
